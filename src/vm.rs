@@ -4,11 +4,11 @@ pub struct VM {
     // Since we know the number of registers at compile time, we use an array instead
     // of a vector.
     /// The registers of the VM.
-    registers: [i32; 32],
+    pub registers: [i32; 32],
     /// Program counter that is used to track which byte is executing.
     pc: usize,
     /// Bytecode of the program.
-    program: Vec<u8>,
+    pub program: Vec<u8>,
     /// The remainder of a division operation.
     remainder: u32,
     /// Contains the result of the last comparison operation.
@@ -164,6 +164,10 @@ impl VM {
         let result = ((self.program[self.pc] as u16) << 8) | (self.program[self.pc + 1] as u16);
         self.pc += 2;
         result
+    }
+
+    pub fn add_byte(&mut self, byte: u8) {
+        self.program.push(byte);
     }
 }
 
