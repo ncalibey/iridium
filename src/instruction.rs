@@ -1,5 +1,7 @@
+use nom::types::CompleteStr;
+
 /// Opcode encapsulates the various operation codes.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Opcode {
     HLT,
     LOAD,
@@ -45,6 +47,33 @@ impl From<u8> for Opcode {
         }
     }
 }
+
+impl<'a> From<CompleteStr<'a>> for Opcode {
+    fn from(v: CompleteStr<'a>) -> Self {
+        let lower = v.to_lowercase();
+        match CompleteStr(&lower) {
+            CompleteStr("hlt") => Opcode::HLT,
+            CompleteStr("load") => Opcode::LOAD,
+            CompleteStr("add") => Opcode::ADD,
+            CompleteStr("sub") => Opcode::SUB,
+            CompleteStr("mul") => Opcode::MUL,
+            CompleteStr("div") => Opcode::DIV,
+            CompleteStr("jmp") => Opcode::JMP,
+            CompleteStr("jmpf") => Opcode::JMPF,
+            CompleteStr("jmpb") => Opcode::JMPB,
+            CompleteStr("eq") => Opcode::EQ,
+            CompleteStr("neq") => Opcode::NEQ,
+            CompleteStr("gt") => Opcode::GT,
+            CompleteStr("lt") => Opcode::LT,
+            CompleteStr("gtq") => Opcode::GTQ,
+            CompleteStr("ltq") => Opcode::LTQ,
+            CompleteStr("jeq") => Opcode::JEQ,
+            CompleteStr("jneq") => Opcode::JNEQ,
+            _ => Opcode::IGL,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Instruction {
     opcode: Opcode,
@@ -52,7 +81,7 @@ pub struct Instruction {
 
 impl Instruction {
     pub fn new(opcode: Opcode) -> Instruction {
-        Instruction { opcode: opcode }
+        Instruction { opcode }
     }
 }
 
