@@ -96,8 +96,116 @@ mod tests {
     }
 
     #[test]
-    fn test_create_igl() {
+    fn test_create_load() {
+        let opcode = Opcode::LOAD;
+        assert_eq!(opcode, Opcode::LOAD);
+    }
+
+    #[test]
+    fn test_create_add() {
+        let opcode = Opcode::ADD;
+        assert_eq!(opcode, Opcode::ADD);
+    }
+
+    #[test]
+    fn test_create_sub() {
+        let opcode = Opcode::SUB;
+        assert_eq!(opcode, Opcode::SUB);
+    }
+
+    #[test]
+    fn test_create_mul() {
+        let opcode = Opcode::MUL;
+        assert_eq!(opcode, Opcode::MUL);
+    }
+
+    #[test]
+    fn test_create_div() {
+        let opcode = Opcode::DIV;
+        assert_eq!(opcode, Opcode::DIV);
+    }
+
+    #[test]
+    fn test_create_jmp() {
+        let opcode = Opcode::JMP;
+        assert_eq!(opcode, Opcode::JMP);
+    }
+
+    #[test]
+    fn test_create_jmpf() {
+        let opcode = Opcode::JMPF;
+        assert_eq!(opcode, Opcode::JMPF);
+    }
+
+    #[test]
+    fn test_create_jmpb() {
+        let opcode = Opcode::JMPB;
+        assert_eq!(opcode, Opcode::JMPB);
+    }
+
+    #[test]
+    fn test_create_eq() {
+        let opcode = Opcode::EQ;
+        assert_eq!(opcode, Opcode::EQ);
+    }
+
+    #[test]
+    fn test_create_neq() {
+        let opcode = Opcode::NEQ;
+        assert_eq!(opcode, Opcode::NEQ);
+    }
+
+    #[test]
+    fn test_create_gt() {
+        let opcode = Opcode::GT;
+        assert_eq!(opcode, Opcode::GT);
+    }
+
+    #[test]
+    fn test_create_lt() {
+        let opcode = Opcode::LT;
+        assert_eq!(opcode, Opcode::LT);
+    }
+
+    #[test]
+    fn test_create_gtq() {
+        let opcode = Opcode::GTQ;
+        assert_eq!(opcode, Opcode::GTQ);
+    }
+
+    #[test]
+    fn test_create_ltq() {
+        let opcode = Opcode::LTQ;
+        assert_eq!(opcode, Opcode::LTQ);
+    }
+
+    #[test]
+    fn test_create_jeq() {
+        let opcode = Opcode::JEQ;
+        assert_eq!(opcode, Opcode::JEQ);
+    }
+
+    #[test]
+    fn test_create_jneq() {
         let opcode = Opcode::IGL;
+        assert_eq!(opcode, Opcode::IGL);
+    }
+
+    #[test]
+    fn test_create_igl() {
+        let opcode = Opcode::JNEQ;
+        assert_eq!(opcode, Opcode::JNEQ);
+    }
+
+    #[test]
+    fn test_str_to_opcode() {
+        // Check lowercase.
+        let opcode = Opcode::from(CompleteStr("load"));
+        assert_eq!(opcode, Opcode::LOAD);
+        // Check uppercase.
+        let opcode = Opcode::from(CompleteStr("LOAD"));
+        assert_eq!(opcode, Opcode::LOAD);
+        let opcode = Opcode::from(CompleteStr("illegal"));
         assert_eq!(opcode, Opcode::IGL);
     }
 }

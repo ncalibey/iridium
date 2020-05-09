@@ -26,8 +26,8 @@ mod tests {
         let (rest, token) = result.unwrap();
         assert_eq!(token, Token::Op { code: Opcode::LOAD });
         assert_eq!(rest, CompleteStr(""));
-
         let result = opcode_load(CompleteStr("aold"));
-        assert_eq!(result.is_ok(), false);
+        let (_, token) = result.unwrap();
+        assert_eq!(token, Token::Op { code: Opcode::IGL });
     }
 }
