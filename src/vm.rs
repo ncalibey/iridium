@@ -9,6 +9,7 @@ pub struct VM {
     pc: usize,
     /// Bytecode of the program.
     pub program: Vec<u8>,
+    heap: Vec<u8>,
     /// The remainder of a division operation.
     remainder: u32,
     /// Contains the result of the last comparison operation.
@@ -21,6 +22,7 @@ impl VM {
         VM {
             registers: [0; 32],
             program: vec![],
+            heap: vec![],
             pc: 0,
             remainder: 0,
             equal_flag: false,
@@ -137,6 +139,12 @@ impl VM {
                 if !self.equal_flag {
                     self.pc = target as usize;
                 }
+            }
+            Opcode::ALOC => {
+                let register = self.next_8_bits() as usize;
+                let bytes = self.registers[register];
+                let new_end = self.heap.len() as i32 + bytes;
+                self.heap.resize(new_end as usize, 0);
             }
             _ => {
                 println!("Unrecognized opcode found! Terminating");
@@ -382,5 +390,14 @@ mod tests {
         test_vm.program = vec![16, 0, 0, 0, 17, 0, 0, 0, 17, 0, 0, 0];
         test_vm.run_once();
         assert_eq!(test_vm.pc, 7);
+    }
+
+    #[test]
+    fn test_aloc_opcode() {
+        let mut test_vm = get_test_vm();
+        test_vm.registers[0] = 1024;
+        test_vm.program = vec![17, 0, 0, 0];
+        test_vm.run_once();
+        assert_eq!(test_vm.heap.len(), 1024);
     }
 }
