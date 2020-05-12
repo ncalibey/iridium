@@ -1,4 +1,4 @@
-use crate::assembler::program_parsers::program;
+use crate::assembler::{program_parsers::program, SymbolTable};
 use crate::vm::VM;
 use nom::types::CompleteStr;
 use std;
@@ -84,7 +84,9 @@ impl REPL {
                             continue;
                         }
                     };
-                    self.vm.program.append(&mut program.to_bytes());
+                    // TODO fix
+                    let symbol_table = SymbolTable::new();
+                    self.vm.program.append(&mut program.to_bytes(&symbol_table));
                 }
                 _ => {
                     let parsed_program = program(CompleteStr(buffer));
@@ -93,7 +95,9 @@ impl REPL {
                         continue;
                     }
                     let (_, result) = parsed_program.unwrap();
-                    let bytecode = result.to_bytes();
+                    // TODO fix
+                    let symbol_table = SymbolTable::new();
+                    let bytecode = result.to_bytes(&symbol_table);
 
                     for byte in bytecode {
                         self.vm.add_byte(byte);
