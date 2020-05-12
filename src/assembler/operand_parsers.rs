@@ -1,7 +1,15 @@
 use nom::digit;
 use nom::types::CompleteStr;
 
+use crate::assembler::register_parsers::register;
 use crate::assembler::Token;
+
+named!(pub operand<CompleteStr, Token>,
+    alt!(
+        integer_operand |
+        register
+    )
+);
 
 // Parser for integer numbers, which we preface with `#` in our assembly language.
 // Example: #100.

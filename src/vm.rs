@@ -45,12 +45,12 @@ impl VM {
         // If our program counter has exceeded the length of the program itself,
         // something has gone awry.
         if self.pc >= self.program.len() {
-            return false;
+            return true;
         }
         match self.decode_opcode() {
             Opcode::HLT => {
                 println!("HLT encountered");
-                return false;
+                return true;
             }
             Opcode::LOAD => {
                 // We cast to usize so we can use it as an index into the array.
@@ -146,12 +146,20 @@ impl VM {
                 let new_end = self.heap.len() as i32 + bytes;
                 self.heap.resize(new_end as usize, 0);
             }
+            Opcode::INC => {
+                let register = self.next_8_bits() as usize;
+                self.registers[register] += 1;
+            }
+            Opcode::DEC => {
+                let register = self.next_8_bits() as usize;
+                self.registers[register] -= 1;
+            }
             _ => {
                 println!("Unrecognized opcode found! Terminating");
-                return false;
+                return true;
             }
         }
-        true
+        false
     }
 
     fn decode_opcode(&mut self) -> Opcode {
@@ -399,5 +407,23 @@ mod tests {
         test_vm.program = vec![17, 0, 0, 0];
         test_vm.run_once();
         assert_eq!(test_vm.heap.len(), 1024);
+    }
+
+    #[test]
+    fn test_inc_opdcode() {
+        let mut test_vm = get_test_vm();
+        test_vm.registers[0] = 1;
+        test_vm.program = vec![18, 0, 0, 0];
+        test_vm.run_once();
+        assert_eq!(test_vm.registers[0], 2);
+    }
+
+    #[test]
+    fn test_dec_opdcode() {
+        let mut test_vm = get_test_vm();
+        test_vm.registers[0] = 1;
+        test_vm.program = vec![19, 0, 0, 0];
+        test_vm.run_once();
+        assert_eq!(test_vm.registers[0], 0);
     }
 }

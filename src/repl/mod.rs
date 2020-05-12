@@ -3,7 +3,7 @@ use crate::vm::VM;
 use nom::types::CompleteStr;
 use std;
 use std::io;
-use std::{io::Write, num::ParseIntError};
+use std::{fs::File, io::Read, io::Write, num::ParseIntError, path::Path};
 
 /// The core structure of the Assembler REPL.
 pub struct REPL {
@@ -59,6 +59,32 @@ impl REPL {
                     println!("Listing registers and all contents:");
                     println!("{:#?}", self.vm.registers);
                     println!("End of Register Listing");
+                }
+                ".clear_program" => {
+                    self.vm.program = vec![];
+                    println!("Program has been cleared!");
+                }
+                ".load_file" => {
+                    print!("Please enter the path to the file you wish to load: ");
+                    io::stdout().flush().expect("Unable to flush stdout");
+                    let mut tmp = String::new();
+                    stdin
+                        .read_line(&mut tmp)
+                        .expect("Unable to read line from user");
+                    let tmp = tmp.trim();
+                    let filename = Path::new(&tmp);
+                    let mut f = File::open(Path::new(&filename)).expect("File not found");
+                    let mut contents = String::new();
+                    f.read_to_string(&mut contents)
+                        .expect("There was an error freading from the file");
+                    let program = match program(CompleteStr(&contents)) {
+                        Ok((_remainder, program)) => program,
+                        Err(e) => {
+                            println!("Unable to parse input: {:?}", e);
+                            continue;
+                        }
+                    };
+                    self.vm.program.append(&mut program.to_bytes());
                 }
                 _ => {
                     let parsed_program = program(CompleteStr(buffer));

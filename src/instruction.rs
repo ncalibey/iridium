@@ -21,6 +21,8 @@ pub enum Opcode {
     JEQ,
     JNEQ,
     ALOC,
+    INC,
+    DEC,
     IGL,
 }
 
@@ -45,6 +47,8 @@ impl From<u8> for Opcode {
             15 => Opcode::JEQ,
             16 => Opcode::JNEQ,
             17 => Opcode::ALOC,
+            18 => Opcode::INC,
+            19 => Opcode::DEC,
             _ => Opcode::IGL,
         }
     }
