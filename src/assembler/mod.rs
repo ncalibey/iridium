@@ -21,6 +21,9 @@ pub enum Token {
     Directive { name: String },
 }
 
+pub const PIE_HEADER_PREFIX: [u8; 4] = [45, 50, 49, 45];
+pub const PIE_HEADER_LENGTH: usize = 64;
+
 /// The `AssemblerPhase` enum details which phase an `Assembler` is in. It can be only one of
 /// two variants: `First` or `Second`.
 #[derive(Debug)]
@@ -55,8 +58,15 @@ impl Assembler {
         // Pass the raw &str to the parser. Match to see if the program was parsed correctly.
         match program(CompleteStr(raw)) {
             Ok((_remainder, program)) => {
+                // First we grab the header for later.
+                let mut assembled_program = self.write_pie_header();
+                // First pass.
                 self.process_first_phase(&program);
-                Some(self.process_second_phase(&program))
+                // Second pass.
+                let mut body = self.process_second_phase(&program);
+                // Merge the header with the body vector.
+                assembled_program.append(&mut body);
+                Some(assembled_program)
             }
             Err(e) => {
                 println!("There was an error assembling the code: {:?}", e);
@@ -96,6 +106,19 @@ impl Assembler {
                 c += 4;
             }
         }
+    }
+
+    /// Writes the PIE header which is 4 bytes long. The remaining 60 bytes are padded with 0s
+    /// so they can be used later on.
+    fn write_pie_header(&self) -> Vec<u8> {
+        let mut header = vec![];
+        for byte in PIE_HEADER_PREFIX.iter() {
+            header.push(byte.clone());
+        }
+        while header.len() <= PIE_HEADER_LENGTH {
+            header.push(0 as u8);
+        }
+        header
     }
 }
 
@@ -185,8 +208,8 @@ mod tests {
             "load $0 #100\nload $1 #1\nload $2 #0\ntest: inc $0\nneq $0 $2\njmpe @test\nhlt";
         let program = asm.assemble(test_string).unwrap();
         let mut vm = VM::new();
-        assert_eq!(program.len(), 21);
+        assert_eq!(program.len(), 89);
         vm.add_bytes(program);
-        assert_eq!(vm.program.len(), 21);
+        assert_eq!(vm.program.len(), 89);
     }
 }

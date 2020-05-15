@@ -1,0 +1,9 @@
+name: iridium
+version: "0.0.1"
+author: Nick Calibey <nick.calibey@gmail.com>
+about: Interpreter for the Iridium language
+args:
+  - INPUT_FILE:
+      help: Path to the .iasm or .ir file to rune
+      required: false
+      index: 1
