@@ -1,8 +1,10 @@
 use nom::types::CompleteStr;
 
+use crate::assembler::assembler_errors::AssemblerError;
 use crate::assembler::program_parsers::*;
 use crate::instruction::Opcode;
 
+pub mod assembler_errors;
 pub mod directive_parsers;
 pub mod instruction_parsers;
 pub mod label_parsers;
@@ -19,6 +21,7 @@ pub enum Token {
     LabelDeclaration { name: String },
     LabelUsage { name: String },
     Directive { name: String },
+    IrString { name: String },
 }
 
 pub const PIE_HEADER_PREFIX: [u8; 4] = [45, 50, 49, 45];
@@ -32,6 +35,33 @@ pub enum AssemblerPhase {
     Second,
 }
 
+impl Default for AssemblerPhase {
+    fn default() -> Self {
+        AssemblerPhase::First
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum AssemblerSection {
+    Data { starting_instruction: Option<u32> },
+    Code { starting_instruction: Option<u32> },
+    Unknown,
+}
+
+impl<'a> From<&'a str> for AssemblerSection {
+    fn from(name: &str) -> AssemblerSection {
+        match name {
+            "data" => AssemblerSection::Data {
+                starting_instruction: None,
+            },
+            "code" => AssemblerSection::Code {
+                starting_instruction: None,
+            },
+            _ => AssemblerSection::Unknown,
+        }
+    }
+}
+
 /// The Assembler is a *two-pass* assembler, meaning that it takes two passes over the code
 /// when assembling. The first is for passing the program string to the parser and constructing
 /// a symbol table, and the second is for converting it into the bytecode that can be read by
@@ -42,6 +72,21 @@ pub struct Assembler {
     pub phase: AssemblerPhase,
     /// The symbol table used for storing parsed labels.
     pub symbols: SymbolTable,
+    /// The read-only data section that is used for storing constants.
+    pub ro: Vec<u8>,
+    /// The compiled bycode generated from the assembly instructions.
+    pub bytecode: Vec<u8>,
+    /// The current offset of the read-only section.
+    ro_offset: u32,
+    /// A list of all sections seen in the code.
+    sections: Vec<AssemblerSection>,
+    /// The current section of the Assembler.
+    current_section: Option<AssemblerSection>,
+    /// The current instruction of the Assembler.
+    current_instruction: u32,
+    /// Errors encountered when assembling the code. These are presented to the user
+    /// at the end of assembly.
+    errors: Vec<AssemblerError>,
 }
 
 impl Assembler {
@@ -50,11 +95,18 @@ impl Assembler {
         Assembler {
             phase: AssemblerPhase::First,
             symbols: SymbolTable::new(),
+            ro: vec![],
+            bytecode: vec![],
+            ro_offset: 0,
+            sections: vec![],
+            current_section: None,
+            current_instruction: 0,
+            errors: vec![],
         }
     }
 
     /// Assembles the code into bytecode that is readable by the VM in two-passes.
-    pub fn assemble(&mut self, raw: &str) -> Option<Vec<u8>> {
+    pub fn assemble(&mut self, raw: &str) -> Result<Vec<u8>, Vec<AssemblerError>> {
         // Pass the raw &str to the parser. Match to see if the program was parsed correctly.
         match program(CompleteStr(raw)) {
             Ok((_remainder, program)) => {
@@ -62,15 +114,30 @@ impl Assembler {
                 let mut assembled_program = self.write_pie_header();
                 // First pass.
                 self.process_first_phase(&program);
+
+                // Check for errors. If there are any, return and don't do the second pass.
+                if !self.errors.is_empty() {
+                    return Err(self.errors.clone());
+                }
+
+                // Ensure we have at least one data section and one code section.
+                if self.sections.len() != 2 {
+                    println!("Did not find at least two sections.");
+                    self.errors.push(AssemblerError::InsufficientSections);
+                    return Err(self.errors.clone());
+                }
+
                 // Second pass.
                 let mut body = self.process_second_phase(&program);
                 // Merge the header with the body vector.
                 assembled_program.append(&mut body);
-                Some(assembled_program)
+                Ok(assembled_program)
             }
             Err(e) => {
                 println!("There was an error assembling the code: {:?}", e);
-                None
+                Err(vec![AssemblerError::ParseError {
+                    error: e.to_string(),
+                }])
             }
         }
     }
@@ -115,7 +182,7 @@ impl Assembler {
         for byte in PIE_HEADER_PREFIX.iter() {
             header.push(byte.clone());
         }
-        while header.len() <= PIE_HEADER_LENGTH {
+        while header.len() < PIE_HEADER_LENGTH {
             header.push(0 as u8);
         }
         header
@@ -208,8 +275,8 @@ mod tests {
             "load $0 #100\nload $1 #1\nload $2 #0\ntest: inc $0\nneq $0 $2\njmpe @test\nhlt";
         let program = asm.assemble(test_string).unwrap();
         let mut vm = VM::new();
-        assert_eq!(program.len(), 89);
+        assert_eq!(program.len(), 92);
         vm.add_bytes(program);
-        assert_eq!(vm.program.len(), 89);
+        assert_eq!(vm.program.len(), 92);
     }
 }

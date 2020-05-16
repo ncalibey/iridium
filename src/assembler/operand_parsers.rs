@@ -1,13 +1,16 @@
 use nom::digit;
 use nom::types::CompleteStr;
 
+use crate::assembler::label_parsers::label_usage;
 use crate::assembler::register_parsers::register;
 use crate::assembler::Token;
 
 named!(pub operand<CompleteStr, Token>,
     alt!(
         integer_operand |
-        register
+        label_usage |
+        register |
+        irstring
     )
 );
 
@@ -21,6 +24,19 @@ named!(pub integer_operand<CompleteStr, Token>,
             (
                 Token::IntegerOperand{value: reg_num.parse::<i32>().unwrap()}
             )
+        )
+    )
+);
+
+// Parser for string contstants in the form of `my_string .asciiz '<string>'`.
+// Strings are null-terminated (hence the MIPS `.asciiz` directive).
+named!(irstring<CompleteStr, Token>,
+    do_parse!(
+        tag!("'") >>
+        content: take_until!("'") >>
+        tag!("'") >>
+        (
+            Token::IrString{ name: content.to_string() }
         )
     )
 );
@@ -39,5 +55,11 @@ mod tests {
 
         let result = integer_operand(CompleteStr("10"));
         assert_eq!(result.is_ok(), false);
+    }
+
+    #[test]
+    fn test_parse_string_operand() {
+        let result = irstring(CompleteStr("'This is a test'"));
+        assert_eq!(result.is_ok(), true);
     }
 }

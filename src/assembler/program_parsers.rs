@@ -1,5 +1,6 @@
 use nom::types::CompleteStr;
 
+use crate::assembler::directive_parsers::directive;
 use crate::assembler::instruction_parsers::{instruction, AssemblerInstruction};
 use crate::assembler::SymbolTable;
 
@@ -21,7 +22,7 @@ impl Program {
 
 named!(pub program<CompleteStr, Program>,
     do_parse!(
-        instructions: many1!(instruction) >>
+        instructions: many1!(alt!(instruction | directive)) >>
         (
             Program {
                 instructions: instructions
@@ -51,6 +52,12 @@ mod tests {
         let symbol_table = SymbolTable::new();
         let bytecode = program.to_bytes(&symbol_table);
         assert_eq!(bytecode.len(), 4);
-        println!("{:?}", bytecode);
+    }
+
+    #[test]
+    fn test_complete_program() {
+        let test_program = CompleteStr(".data\nhello: .asciiz 'Hello everyone!'\n.code\nhlt");
+        let result = program(test_program);
+        assert_eq!(result.is_ok(), true);
     }
 }
