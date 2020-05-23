@@ -359,4 +359,42 @@ mod tests {
         let v = sym.symbol_value("does_not_exist");
         assert_eq!(v.is_some(), false);
     }
+
+    #[test]
+    fn test_ro_data() {
+        let mut asm = Assembler::new();
+        let test_string = ".data\ntest: .asciiz 'This is a test'\n.code\n";
+        let program = asm.assemble(test_string);
+        assert_eq!(program.is_ok(), true);
+    }
+
+    #[test]
+    fn test_bad_ro_data() {
+        let mut asm = Assembler::new();
+        let test_string = ".code\ntest: .asciiz 'This is a test'\n.wrong\n";
+        let program = asm.assemble(test_string);
+        assert_eq!(program.is_ok(), false);
+    }
+
+    #[test]
+    fn test_first_phase_no_segment() {
+        let mut asm = Assembler::new();
+        let test_string = "hello: .asciiz 'Fail'";
+        let result = program(CompleteStr(test_string));
+        assert_eq!(result.is_ok(), true);
+        let (_, p) = result.unwrap();
+        asm.process_first_phase(&p);
+        assert_eq!(asm.errors.len(), 1);
+    }
+
+    #[test]
+    fn test_first_phase_inside_segment() {
+        let mut asm = Assembler::new();
+        let test_string = ".data\ntest: .asciiz 'Hello'";
+        let result = program(CompleteStr(test_string));
+        assert_eq!(result.is_ok(), true);
+        let (_, p) = result.unwrap();
+        asm.process_first_phase(&p);
+        assert_eq!(asm.errors.len(), 0);
+    }
 }
