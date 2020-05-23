@@ -1,4 +1,4 @@
-use crate::assembler::{program_parsers::program, SymbolTable};
+use crate::assembler::{program_parsers::program, symbols::SymbolTable};
 use crate::vm::VM;
 use nom::types::CompleteStr;
 use std;

@@ -1,7 +1,9 @@
 use nom::types::CompleteStr;
 
 use crate::assembler::assembler_errors::AssemblerError;
+use crate::assembler::instruction_parsers::AssemblerInstruction;
 use crate::assembler::program_parsers::*;
+use crate::assembler::symbols::{Symbol, SymbolTable, SymbolType};
 use crate::instruction::Opcode;
 
 pub mod assembler_errors;
@@ -12,6 +14,7 @@ pub mod opcode_parsers;
 pub mod operand_parsers;
 pub mod program_parsers;
 pub mod register_parsers;
+pub mod symbols;
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
@@ -29,7 +32,7 @@ pub const PIE_HEADER_LENGTH: usize = 64;
 
 /// The `AssemblerPhase` enum details which phase an `Assembler` is in. It can be only one of
 /// two variants: `First` or `Second`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum AssemblerPhase {
     First,
     Second,
@@ -142,20 +145,157 @@ impl Assembler {
         }
     }
 
-    /// First pass over the code which extracts any labels.
+    /// First pass over the code which extracts any label declarations and directives and puts them
+    /// into segments.
     fn process_first_phase(&mut self, p: &Program) {
-        self.extract_labels(p);
+        // We iterate over all the instructions even though we are hunting for label declarations.
+        for i in &p.instructions {
+            if i.is_label() {
+                if self.current_section.is_some() {
+                    // If we've already hit a segment header (e.g., `.code`), then we're all good to
+                    // process the label.
+                    self.process_label_declaration(&i);
+                } else {
+                    // If we haven't hit a segment yet, then we have an error since we have a label
+                    // outside of a segment header.
+                    self.errors.push(AssemblerError::NoSegmentDeclarationFound {
+                        instruction: self.current_instruction,
+                    });
+                }
+            }
+
+            if i.is_directive() {
+                self.process_directive(i);
+            }
+            self.current_instruction += 1;
+        }
         self.phase = AssemblerPhase::Second;
     }
 
     /// Second pass over the code which converts the instructions and symbols into bytecode (`Vec<u8>`).
     fn process_second_phase(&mut self, p: &Program) -> Vec<u8> {
+        // Restart the counting of instructions.
+        self.current_instruction = 0;
+        // We put the bytecode up for execution in a separate Vec so we can do some
+        // post-processing before merging it with the header and read-only sections.
         let mut program = vec![];
+        // Same as first-phase, but now we care about opcodes and directives.
         for i in &p.instructions {
-            let mut bytes = i.to_bytes(&self.symbols);
-            program.append(&mut bytes);
+            if i.is_opcode() {
+                // Opcodes know how to properly transform themselves into 32-bits, so we can just
+                // call `to_bytes` and append it to our program.
+                let mut bytes = i.to_bytes(&self.symbols);
+                program.append(&mut bytes);
+            }
+            if i.is_directive() {
+                // We are looking for different types of directives than gathered on the first pass.
+                // As such, we let the directive check which phase we're in and decide what to do.
+                self.process_directive(i);
+            }
+            self.current_instruction += 1;
         }
         program
+    }
+
+    /// Processes label declarations such as `hello: .asciiz 'Hello'`.
+    fn process_label_declaration(&mut self, i: &AssemblerInstruction) {
+        // Check if the label is None or String.
+        let name = match i.get_label_name() {
+            Some(name) => name,
+            None => {
+                self.errors
+                    .push(AssemblerError::StringConstantDeclaredWithoutLabel {
+                        instruction: self.current_instruction,
+                    });
+                return;
+            }
+        };
+
+        // Check if label is already in use (i.e. has an entry in the symbol table).
+        if self.symbols.has_symbol(&name) {
+            self.errors.push(AssemblerError::SymbolAlreadyDeclared);
+            return;
+        }
+
+        let symbol = Symbol::new(name, SymbolType::Label);
+        self.symbols.add_symbol(symbol);
+    }
+
+    /// Processes directives such as `.code`.
+    fn process_directive(&mut self, i: &AssemblerInstruction) {
+        let directive_name = match i.get_directive_name() {
+            Some(name) => name,
+            None => {
+                println!("Directive has an invalid name: {:?}", i);
+                return;
+            }
+        };
+        // Now check for any operands.
+        if i.has_operands() {
+            // If yes, determine the directive.
+            match directive_name.as_ref() {
+                "asciiz" => {
+                    self.handle_asciiz(i);
+                }
+                _ => {
+                    self.errors.push(AssemblerError::UnknownDirectiveFound {
+                        directive: directive_name.clone(),
+                    });
+                    return;
+                }
+            }
+        } else {
+            // If not, then it's a section header.
+            self.process_section_header(&directive_name);
+        }
+    }
+
+    /// Handles a declaration of a section header (e.g. `.code`).
+    fn process_section_header(&mut self, header_name: &str) {
+        let new_section: AssemblerSection = header_name.into();
+        // Only specific names are allowed.
+        if new_section == AssemblerSection::Unknown {
+            println!("Found a section header that is unknown: {:#?}", header_name);
+            return;
+        }
+        self.sections.push(new_section.clone());
+        self.current_section = Some(new_section);
+    }
+
+    /// Handles a declaration of a null-terminated string (e.g. `hello: .asciiz 'Hello!'`)
+    fn handle_asciiz(&mut self, i: &AssemblerInstruction) {
+        // Being a constant declaration, this is only meaningful in the first pass.
+        if self.phase != AssemblerPhase::First {
+            return;
+        }
+
+        // Operand1 will have the entire string we need to read into RO memory.
+        match i.get_string_constant() {
+            Some(s) => {
+                match i.get_label_name() {
+                    Some(name) => {
+                        self.symbols.set_symbol_offset(&name, self.ro_offset);
+                    }
+                    None => {
+                        // This would be someting typing: .asciiz 'Hello!'
+                        println!("Found a string constant with no associated label!");
+                        return;
+                    }
+                };
+                // We'll read the string into the read-only section byte-by-byte.
+                for byte in s.as_bytes() {
+                    self.ro.push(*byte);
+                    self.ro_offset += 1;
+                }
+                // This is the null termination bit we are using to indicate a string has ended.
+                self.ro.push(0);
+                self.ro_offset += 1;
+            }
+            None => {
+                // This just means someone typed `.asciiz` for some reason.
+                println!("String constant following an .asciiz was empty");
+            }
+        };
     }
 
     /// Extracts the labels for the program by looking for label declarations (e.g. `some_name:<opcode>...`).
@@ -163,9 +303,9 @@ impl Assembler {
         let mut c = 0;
         for i in &p.instructions {
             if i.is_label() {
-                match i.label_name() {
+                match i.get_label_name() {
                     Some(name) => {
-                        let symbol = Symbol::new(name, SymbolType::Label, c);
+                        let symbol = Symbol::new_with_offset(name, SymbolType::Label, c);
                         self.symbols.add_symbol(symbol);
                     }
                     None => {}
@@ -189,94 +329,34 @@ impl Assembler {
     }
 }
 
-/// Represents a symbol within the parsed code.
-#[derive(Debug)]
-pub struct Symbol {
-    /// The name of the symbol.
-    name: String,
-    /// The byte offset the symbol is for.
-    offset: u32,
-    /// The type of symbol.
-    symbol_type: SymbolType,
-}
-
-impl Symbol {
-    /// Returns a new `Symbol`.
-    pub fn new(name: String, symbol_type: SymbolType, offset: u32) -> Symbol {
-        Symbol {
-            name,
-            symbol_type,
-            offset,
-        }
-    }
-}
-
-/// The various types of symbols that can be parsed from a program.
-#[derive(Debug)]
-pub enum SymbolType {
-    /// Labels that are used for naming specific instructions.
-    /// E.g. `test1: LOAD $0 #100`.
-    Label,
-}
-
-#[derive(Debug)]
-/// A table for holding all symbols parsed from a program.
-///
-/// TODO: implement as HashMap.
-pub struct SymbolTable {
-    symbols: Vec<Symbol>,
-}
-
-impl SymbolTable {
-    /// Returns a new `SymbolTable`.
-    pub fn new() -> SymbolTable {
-        SymbolTable { symbols: vec![] }
-    }
-
-    /// Adds a symbol to the table.
-    pub fn add_symbol(&mut self, s: Symbol) {
-        self.symbols.push(s);
-    }
-
-    /// Returns the byte offset value of a symbol if found within the table.
-    pub fn symbol_value(&self, s: &str) -> Option<u32> {
-        for symbol in &self.symbols {
-            if symbol.name == s {
-                return Some(symbol.offset);
-            }
-        }
-        None
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::vm::VM;
 
     #[test]
-    fn test_symbol_table() {
-        let mut sym = SymbolTable::new();
-        let new_symbol = Symbol::new("test".to_string(), SymbolType::Label, 12);
-        sym.add_symbol(new_symbol);
-        assert_eq!(sym.symbols.len(), 1);
-        let v = sym.symbol_value("test");
-        assert_eq!(v.is_some(), true);
-        let v = v.unwrap();
-        assert_eq!(v, 12);
-        let v = sym.symbol_value("does_not_exist");
-        assert_eq!(v.is_some(), false);
-    }
-
-    #[test]
     fn test_assemble_program() {
         let mut asm = Assembler::new();
         let test_string =
-            "load $0 #100\nload $1 #1\nload $2 #0\ntest: inc $0\nneq $0 $2\njmpe @test\nhlt";
+            ".data\n.code\nload $0 #100\nload $1 #1\nload $2 #0\ntest: inc $0\nneq $0 $2\njmpe @test\nhlt";
         let program = asm.assemble(test_string).unwrap();
         let mut vm = VM::new();
         assert_eq!(program.len(), 92);
         vm.add_bytes(program);
         assert_eq!(vm.program.len(), 92);
+    }
+
+    #[test]
+    fn test_symbol_table() {
+        let mut sym = SymbolTable::new();
+        let new_symbol = Symbol::new_with_offset(String::from("test"), SymbolType::Label, 12);
+        sym.add_symbol(new_symbol);
+        assert_eq!(sym.symbols.len(), 1);
+        let v = sym.symbol_value("test");
+        assert_eq!(true, v.is_some());
+        let v = v.unwrap();
+        assert_eq!(v, 12);
+        let v = sym.symbol_value("does_not_exist");
+        assert_eq!(v.is_some(), false);
     }
 }

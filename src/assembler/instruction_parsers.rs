@@ -44,7 +44,42 @@ impl AssemblerInstruction {
         self.label.is_some()
     }
 
-    pub fn label_name(&self) -> Option<String> {
+    pub fn is_opcode(&self) -> bool {
+        self.opcode.is_some()
+    }
+
+    pub fn is_directive(&self) -> bool {
+        self.directive.is_some()
+    }
+
+    /// Checks if the AssemblyInstruction has any operands at all.
+    pub fn has_operands(&self) -> bool {
+        self.operand1.is_some() ||
+        self.operand2.is_some() ||
+        self.operand3.is_some()
+    }
+
+    pub fn get_string_constant(&self) -> Option<String> {
+        match &self.operand1 {
+            Some(o) => match o {
+                Token::IrString { name} => Some(name.clone()),
+                _ => None,
+            },
+            None => None,
+        }
+    }
+
+    pub fn get_directive_name(&self) -> Option<String> {
+        match &self.directive {
+            Some(d) => match d {
+                Token::Directive { name } => Some(name.clone()),
+                _ => None,
+            },
+            None => None,
+        }
+    }
+
+    pub fn get_label_name(&self) -> Option<String> {
         match &self.label {
             Some(l) => match l {
                 Token::LabelDeclaration { name } => Some(name.clone()),

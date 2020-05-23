@@ -23,6 +23,7 @@ pub enum Opcode {
     ALOC,
     INC,
     DEC,
+    PRTS,
     IGL,
 }
 
@@ -49,6 +50,7 @@ impl From<u8> for Opcode {
             17 => Opcode::ALOC,
             18 => Opcode::INC,
             19 => Opcode::DEC,
+            20 => Opcode::PRTS,
             _ => Opcode::IGL,
         }
     }
@@ -75,6 +77,7 @@ impl<'a> From<CompleteStr<'a>> for Opcode {
             CompleteStr("ltq") => Opcode::LTQ,
             CompleteStr("jeq") => Opcode::JEQ,
             CompleteStr("jneq") => Opcode::JNEQ,
+            CompleteStr("prts") => Opcode::PRTS,
             _ => Opcode::IGL,
         }
     }
@@ -192,13 +195,19 @@ mod tests {
     }
 
     #[test]
-    fn test_create_jneq() {
+    fn test_create_igl() {
         let opcode = Opcode::IGL;
         assert_eq!(opcode, Opcode::IGL);
     }
 
     #[test]
-    fn test_create_igl() {
+    fn test_create_prts() {
+        let opcode = Opcode::PRTS;
+        assert_eq!(opcode, Opcode::PRTS);
+    }
+
+    #[test]
+    fn test_create_jneq() {
         let opcode = Opcode::JNEQ;
         assert_eq!(opcode, Opcode::JNEQ);
     }
