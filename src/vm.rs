@@ -1,6 +1,7 @@
 use crate::assembler::{PIE_HEADER_LENGTH, PIE_HEADER_PREFIX};
 use crate::instruction::Opcode;
 
+#[derive(Clone)]
 pub struct VM {
     // Since we know the number of registers at compile time, we use an array instead
     // of a vector.
@@ -30,11 +31,18 @@ impl VM {
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> u32 {
+        if !self.verify_header() {
+            println!("Header was incorrect");
+            return 1;
+        }
+
+        self.pc = 64;
         let mut is_done = false;
         while !is_done {
             is_done = self.execute_instruction();
         }
+        0
     }
 
     /// Executes one instruction. Meant to allow for more controlled execution of the VM.
@@ -214,7 +222,7 @@ mod tests {
 
     fn prepend_header(mut b: Vec<u8>) -> Vec<u8> {
         let mut prepension = vec![];
-        for byte in PIE_HEADER_PREFIX.iter() {
+        for byte in PIE_HEADER_PREFIX.into_iter() {
             prepension.push(byte.clone());
         }
         while prepension.len() <= PIE_HEADER_LENGTH {

@@ -1,4 +1,6 @@
+use crate::assembler::Assembler;
 use crate::assembler::{program_parsers::program, symbols::SymbolTable};
+use crate::scheduler::Scheduler;
 use crate::vm::VM;
 use nom::types::CompleteStr;
 use std;
@@ -10,6 +12,8 @@ pub struct REPL {
     command_buffer: Vec<String>,
     /// The VM the REPL uses to execute code.
     vm: VM,
+    asm: Assembler,
+    scheduler: Scheduler,
 }
 
 impl REPL {
@@ -18,6 +22,8 @@ impl REPL {
         REPL {
             vm: VM::new(),
             command_buffer: vec![],
+            asm: Assembler::new(),
+            scheduler: Scheduler::new(),
         }
     }
 
@@ -65,34 +71,42 @@ impl REPL {
                     println!("Program has been cleared!");
                 }
                 ".load_file" => {
-                    print!("Please enter the path to the file you wish to load: ");
-                    io::stdout().flush().expect("Unable to flush stdout");
-                    let mut tmp = String::new();
-                    stdin
-                        .read_line(&mut tmp)
-                        .expect("Unable to read line from user");
-                    let tmp = tmp.trim();
-                    let filename = Path::new(&tmp);
-                    let mut f = match File::open(&filename) {
-                        Ok(f) => f,
-                        Err(e) => {
-                            println!("There was an error opening that file: {:?}", e);
-                            continue;
+                    let contents = self.get_data_from_load();
+                    if let Some(contents) = contents {
+                        let program = match program(CompleteStr(&contents)) {
+                            Ok((_remainder, program)) => program,
+                            Err(e) => {
+                                println!("Unable to parse input: {:?}", e);
+                                continue;
+                            }
+                        };
+                        // TODO fix
+                        let symbol_table = SymbolTable::new();
+                        self.vm.program.append(&mut program.to_bytes(&symbol_table));
+                    } else {
+                        continue;
+                    }
+                }
+                ".spawn" => {
+                    let contents = self.get_data_from_load();
+                    if let Some(contents) = contents {
+                        match self.asm.assemble(&contents) {
+                            Ok(mut assembled_program) => {
+                                println!("Sending assembled program to VM");
+                                self.vm.program.append(&mut assembled_program);
+                                println!("{:#?}", self.vm.program);
+                                self.scheduler.get_thread(self.vm.clone());
+                            }
+                            Err(errors) => {
+                                for error in errors {
+                                    println!("Unable to parse input: {}", error);
+                                }
+                                continue;
+                            }
                         }
-                    };
-                    let mut contents = String::new();
-                    f.read_to_string(&mut contents)
-                        .expect("There was an error freading from the file");
-                    let program = match program(CompleteStr(&contents)) {
-                        Ok((_remainder, program)) => program,
-                        Err(e) => {
-                            println!("Unable to parse input: {:?}", e);
-                            continue;
-                        }
-                    };
-                    // TODO fix
-                    let symbol_table = SymbolTable::new();
-                    self.vm.program.append(&mut program.to_bytes(&symbol_table));
+                    } else {
+                        continue;
+                    }
                 }
                 _ => {
                     let parsed_program = program(CompleteStr(buffer));
@@ -110,6 +124,36 @@ impl REPL {
                     }
                     self.vm.run_once();
                 }
+            }
+        }
+    }
+
+    fn get_data_from_load(&mut self) -> Option<String> {
+        let stdin = io::stdin();
+        println!("Please enter the path to the file you wish to load: ");
+        io::stdout().flush().expect("Unable to flush stdout");
+        let mut tmp = String::new();
+
+        stdin
+            .read_line(&mut tmp)
+            .expect("Unable to read line from user");
+        println!("Attempting to load program from file...");
+
+        let tmp = tmp.trim();
+        let filename = Path::new(&tmp);
+        let mut f = match File::open(&filename) {
+            Ok(f) => f,
+            Err(e) => {
+                println!("There was an error opening that file: {:?}", e);
+                return None;
+            }
+        };
+        let mut contents = String::new();
+        match f.read_to_string(&mut contents) {
+            Ok(_bytes_read) => Some(contents),
+            Err(e) => {
+                println!("there was an error reading that file: {:?}", e);
+                None
             }
         }
     }
