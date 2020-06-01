@@ -1,5 +1,25 @@
 use crate::assembler::{PIE_HEADER_LENGTH, PIE_HEADER_PREFIX};
 use crate::instruction::Opcode;
+use chrono::prelude::*;
+use uuid::Uuid;
+
+/// The type of VM event that occured.
+#[derive(Clone, Debug)]
+pub enum VMEventType {
+    Start,
+    GracefulStop { code: u32 },
+    Crash { code: u32 },
+}
+
+/// An event in the VM.
+#[derive(Clone, Debug)]
+pub struct VMEvent {
+    /// The type of event that occured.
+    event: VMEventType,
+    /// The time at which the event occured.
+    at: DateTime<Utc>,
+    application_id: Uuid,
+}
 
 #[derive(Clone)]
 pub struct VM {
@@ -11,11 +31,18 @@ pub struct VM {
     pc: usize,
     /// Bytecode of the program.
     pub program: Vec<u8>,
+    /// Used for heap memory.
     heap: Vec<u8>,
     /// The remainder of a division operation.
     remainder: u32,
     /// Contains the result of the last comparison operation.
     equal_flag: bool,
+    /// Contains the read-only section of data.
+    ro_data: Vec<u8>,
+    /// Is a unique, randomly generated UUID for identifying a VM.
+    id: Uuid,
+    /// Events that have occured in the VM.
+    events: Vec<VMEvent>,
 }
 
 impl VM {
@@ -28,21 +55,36 @@ impl VM {
             pc: 65,
             remainder: 0,
             equal_flag: false,
+            ro_data: vec![],
+            id: Uuid::new_v4(),
+            events: vec![],
         }
     }
 
-    pub fn run(&mut self) -> u32 {
+    pub fn run(&mut self) -> Vec<VMEvent> {
         if !self.verify_header() {
+            self.events.push(VMEvent {
+                event: VMEventType::Crash { code: 1 },
+                at: Utc::now(),
+                application_id: self.id.clone(),
+            });
             println!("Header was incorrect");
-            return 1;
+            return self.events.clone();
         }
-
+        // If the header is valid, we need to change the PC to be at bit 65.
         self.pc = 64;
-        let mut is_done = false;
-        while !is_done {
+        let mut is_done = None;
+        while is_done.is_none() {
             is_done = self.execute_instruction();
         }
-        0
+        self.events.push(VMEvent {
+            event: VMEventType::GracefulStop {
+                code: is_done.unwrap(),
+            },
+            at: Utc::now(),
+            application_id: self.id.clone(),
+        });
+        self.events.clone()
     }
 
     /// Executes one instruction. Meant to allow for more controlled execution of the VM.
@@ -50,16 +92,16 @@ impl VM {
         self.execute_instruction();
     }
 
-    fn execute_instruction(&mut self) -> bool {
+    fn execute_instruction(&mut self) -> Option<u32> {
         // If our program counter has exceeded the length of the program itself,
         // something has gone awry.
         if self.pc >= self.program.len() {
-            return true;
+            return Some(1);
         }
         match self.decode_opcode() {
             Opcode::HLT => {
                 println!("HLT encountered");
-                return true;
+                return Some(0);
             }
             Opcode::LOAD => {
                 // We cast to usize so we can use it as an index into the array.
@@ -165,10 +207,10 @@ impl VM {
             }
             _ => {
                 println!("Unrecognized opcode found! Terminating");
-                return true;
+                return Some(1);
             }
         }
-        false
+        Some(0)
     }
 
     fn decode_opcode(&mut self) -> Opcode {

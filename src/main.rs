@@ -6,8 +6,10 @@ extern crate nom;
 
 #[macro_use]
 extern crate clap;
-
 use clap::App;
+
+extern crate chrono;
+extern crate uuid;
 
 pub mod assembler;
 pub mod instruction;
@@ -28,7 +30,12 @@ fn main() {
             match program {
                 Ok(p) => {
                     vm.add_bytes(p);
-                    vm.run();
+                    let events = vm.run();
+                    println!("VM Events");
+                    println!("--------------------------");
+                    for event in &events {
+                        println!("{:#?}", event);
+                    }
                     std::process::exit(0);
                 }
                 _ => {}

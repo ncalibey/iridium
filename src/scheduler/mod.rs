@@ -1,4 +1,4 @@
-use crate::vm::VM;
+use crate::vm::{VMEvent, VM};
 use std::thread;
 
 #[derive(Default)]
@@ -15,7 +15,7 @@ impl Scheduler {
         }
     }
 
-    pub fn get_thread(&self, mut vm: VM) -> thread::JoinHandle<u32> {
+    pub fn get_thread(&self, mut vm: VM) -> thread::JoinHandle<Vec<VMEvent>> {
         thread::spawn(move || vm.run())
     }
 }
